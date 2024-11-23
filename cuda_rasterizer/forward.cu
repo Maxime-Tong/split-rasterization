@@ -13,6 +13,10 @@
 #include "auxiliary.h"
 #include <cooperative_groups.h>
 #include <cooperative_groups/reduce.h>
+
+#include <iostream>
+#include <fstream>
+
 namespace cg = cooperative_groups;
 
 // Forward method for converting the input spherical harmonics
@@ -318,7 +322,6 @@ renderCUDA(
 	float C[CHANNELS] = { 0 };
 
 	float expected_invdepth = 0.0f;
-
 	// Iterate over batches until all done or range is complete
 	for (int i = 0; i < rounds; i++, toDo -= BLOCK_SIZE)
 	{
@@ -424,6 +427,24 @@ void FORWARD::render(
 		out_color,
 		depths, 
 		depth);
+
+	int size = W * H;
+	uint32_t* h_data = (uint32_t*)malloc(size * sizeof(uint32_t));
+	cudaMemcpy(h_data, n_contrib, size * sizeof(uint32_t), cudaMemcpyDeviceToHost);
+
+    std::string filename = std::to_string(FORWARD::frame) + ".bin";
+    std::ofstream outfile(filename, std::ios::binary);
+    if (outfile.is_open()) {
+        outfile.write(reinterpret_cast<char*>(h_data), size * sizeof(uint32_t));
+        outfile.close();
+        std::cout << "Data saved to " << filename << std::endl;
+    } else {
+        std::cerr << "Unable to open file " << filename << std::endl;
+    }
+
+	free(h_data);
+	
+	FORWARD::frame++;
 }
 
 void FORWARD::preprocess(int P, int D, int M,
