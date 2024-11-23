@@ -20,7 +20,7 @@
 
 namespace FORWARD
 {
-	uint32_t frame = 0;
+	static uint32_t frame = 0;
 
 	// Perform initial steps for each Gaussian prior to rasterization.
 	void preprocess(int P, int D, int M,

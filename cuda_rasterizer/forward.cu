@@ -432,12 +432,12 @@ void FORWARD::render(
 	uint32_t* h_data = (uint32_t*)malloc(size * sizeof(uint32_t));
 	cudaMemcpy(h_data, n_contrib, size * sizeof(uint32_t), cudaMemcpyDeviceToHost);
 
-    std::string filename = std::to_string(FORWARD::frame) + ".bin";
+	std::string filename = "temps/n_contrib/" + std::to_string(FORWARD::frame) + ".bin";
     std::ofstream outfile(filename, std::ios::binary);
     if (outfile.is_open()) {
         outfile.write(reinterpret_cast<char*>(h_data), size * sizeof(uint32_t));
         outfile.close();
-        std::cout << "Data saved to " << filename << std::endl;
+        // std::cout << "Data saved to " << filename << std::endl;
     } else {
         std::cerr << "Unable to open file " << filename << std::endl;
     }
