@@ -285,6 +285,7 @@ renderCUDA(
 	const float* __restrict__ features,
 	const float4* __restrict__ conic_opacity,
 	float* __restrict__ final_T,
+	uint32_t* __restrict__ valid_points,
 	uint32_t* __restrict__ n_contrib,
 	const float* __restrict__ bg_color,
 	float* __restrict__ out_color,
@@ -322,6 +323,9 @@ renderCUDA(
 	float C[CHANNELS] = { 0 };
 
 	float expected_invdepth = 0.0f;
+
+	int valid_cnt = 0;
+	uint32_t block_id = block.group_index().y * horizontal_blocks + block.group_index().x;
 	// Iterate over batches until all done or range is complete
 	for (int i = 0; i < rounds; i++, toDo -= BLOCK_SIZE)
 	{
@@ -370,6 +374,10 @@ renderCUDA(
 				continue;
 			}
 
+			if (block.thread_rank() == 128 && valid_cnt < BLOCK_SIZE)	{
+				valid_points[block_id * BLOCK_SIZE + (valid_cnt++)] = collected_id[j];
+			}
+
 			// Eq. (3) from 3D Gaussian splatting paper.
 			for (int ch = 0; ch < CHANNELS; ch++)
 				C[ch] += features[collected_id[j] * CHANNELS + ch] * alpha * T;
@@ -414,6 +422,11 @@ void FORWARD::render(
 	float* depths,
 	float* depth)
 {
+	uint32_t* valid_points;
+	uint32_t size = grid.x * grid.y * BLOCK_SIZE;
+	cudaMalloc((void**)&valid_points, size * sizeof(uint32_t));
+	cudaMemset(valid_points, 0, size);
+
 	renderCUDA<NUM_CHANNELS> << <grid, block >> > (
 		ranges,
 		point_list,
@@ -422,17 +435,17 @@ void FORWARD::render(
 		colors,
 		conic_opacity,
 		final_T,
+		valid_points,
 		n_contrib,
 		bg_color,
 		out_color,
 		depths, 
 		depth);
 
-	int size = W * H;
 	uint32_t* h_data = (uint32_t*)malloc(size * sizeof(uint32_t));
-	cudaMemcpy(h_data, n_contrib, size * sizeof(uint32_t), cudaMemcpyDeviceToHost);
+	cudaMemcpy(h_data, valid_points, size * sizeof(uint32_t), cudaMemcpyDeviceToHost);
 
-	std::string filename = "temps/n_contrib/" + std::to_string(FORWARD::frame) + ".bin";
+	std::string filename = "temps/valid_points/" + std::to_string(FORWARD::frame) + ".bin";
     std::ofstream outfile(filename, std::ios::binary);
     if (outfile.is_open()) {
         outfile.write(reinterpret_cast<char*>(h_data), size * sizeof(uint32_t));
