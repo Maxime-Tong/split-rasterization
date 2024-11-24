@@ -374,8 +374,10 @@ renderCUDA(
 				continue;
 			}
 
-			if (block.thread_rank() == 128 && valid_cnt < BLOCK_SIZE)	{
-				valid_points[block_id * BLOCK_SIZE + (valid_cnt++)] = collected_id[j];
+			bool in_zoom = block.group_index().x > 23 && block.group_index().x < 27 && block.group_index().y > 23 && block.group_index().y < 27;
+			uint32_t idx = (block.group_index().x - 24) + (block.group_index().y - 24) * 3;
+			if (in_zoom && valid_cnt < BLOCK_SIZE)	{
+				valid_points[idx * BLOCK_SIZE * BLOCK_SIZE + block.thread_rank() * BLOCK_SIZE + (valid_cnt++)] = collected_id[j];
 			}
 
 			// Eq. (3) from 3D Gaussian splatting paper.
@@ -423,7 +425,7 @@ void FORWARD::render(
 	float* depth)
 {
 	uint32_t* valid_points;
-	uint32_t size = grid.x * grid.y * BLOCK_SIZE;
+	uint32_t size = 9 * BLOCK_SIZE * BLOCK_SIZE;
 	cudaMalloc((void**)&valid_points, size * sizeof(uint32_t));
 	cudaMemset(valid_points, 0, size);
 
