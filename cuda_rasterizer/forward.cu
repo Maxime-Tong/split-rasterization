@@ -324,8 +324,17 @@ renderCUDA(
 
 	float expected_invdepth = 0.0f;
 
-	int valid_cnt = 0;
+	__shared__ int valid_cnt;
 	uint32_t block_id = block.group_index().y * horizontal_blocks + block.group_index().x;
+
+	if (block.thread_rank() == 0) valid_cnt = 0;
+	__shared__ uint32_t filter[BLOCK_SIZE * 4];
+
+	filter[block.thread_rank()] = 0;
+	filter[block.thread_rank() + BLOCK_SIZE] = 0;
+	filter[block.thread_rank() + BLOCK_SIZE * 2] = 0;
+	filter[block.thread_rank() + BLOCK_SIZE * 3] = 0;
+
 	// Iterate over batches until all done or range is complete
 	for (int i = 0; i < rounds; i++, toDo -= BLOCK_SIZE)
 	{
@@ -374,10 +383,16 @@ renderCUDA(
 				continue;
 			}
 
-			bool in_zoom = block.group_index().x > 23 && block.group_index().x < 27 && block.group_index().y > 23 && block.group_index().y < 27;
-			uint32_t idx = (block.group_index().x - 24) + (block.group_index().y - 24) * 3;
-			if (in_zoom && valid_cnt < BLOCK_SIZE)	{
-				valid_points[idx * BLOCK_SIZE * BLOCK_SIZE + block.thread_rank() * BLOCK_SIZE + (valid_cnt++)] = collected_id[j];
+			uint32_t h1 = (collected_id[j] >> 5) & 0x3ff;
+			uint32_t h2 = (1 << (collected_id[j] & 0x1f));
+			bool find = (atomicOr(&filter[h1], h2) & h2);
+			if (!find)
+			{
+				int idx = atomicAdd(&valid_cnt, 1);
+				if (idx < BLOCK_SIZE)
+				{
+					valid_points[block_id * BLOCK_SIZE + idx] = collected_id[j];
+				}
 			}
 
 			// Eq. (3) from 3D Gaussian splatting paper.
@@ -425,7 +440,7 @@ void FORWARD::render(
 	float* depth)
 {
 	uint32_t* valid_points;
-	uint32_t size = 9 * BLOCK_SIZE * BLOCK_SIZE;
+	uint32_t size = grid.x * grid.y * BLOCK_SIZE;
 	cudaMalloc((void**)&valid_points, size * sizeof(uint32_t));
 	cudaMemset(valid_points, 0, size);
 
@@ -444,20 +459,23 @@ void FORWARD::render(
 		depths, 
 		depth);
 
-	uint32_t* h_data = (uint32_t*)malloc(size * sizeof(uint32_t));
-	cudaMemcpy(h_data, valid_points, size * sizeof(uint32_t), cudaMemcpyDeviceToHost);
+	if (true)
+	{
+		uint32_t* h_data = (uint32_t*)malloc(size * sizeof(uint32_t));
+		cudaMemcpy(h_data, valid_points, size * sizeof(uint32_t), cudaMemcpyDeviceToHost);
 
-	std::string filename = "temps/valid_points/" + std::to_string(FORWARD::frame) + ".bin";
-    std::ofstream outfile(filename, std::ios::binary);
-    if (outfile.is_open()) {
-        outfile.write(reinterpret_cast<char*>(h_data), size * sizeof(uint32_t));
-        outfile.close();
-        // std::cout << "Data saved to " << filename << std::endl;
-    } else {
-        std::cerr << "Unable to open file " << filename << std::endl;
-    }
+		std::string filename = "temps/valid_points/" + std::to_string(FORWARD::frame) + ".bin";
+		std::ofstream outfile(filename, std::ios::binary);
+		if (outfile.is_open()) {
+			outfile.write(reinterpret_cast<char*>(h_data), size * sizeof(uint32_t));
+			outfile.close();
+			// std::cout << "Data saved to " << filename << std::endl;
+		} else {
+			std::cerr << "Unable to open file " << filename << std::endl;
+		}
 
-	free(h_data);
+		free(h_data);
+	}
 	
 	FORWARD::frame++;
 }
