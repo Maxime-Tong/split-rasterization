@@ -440,8 +440,8 @@ void FORWARD::render(
 	float* depth)
 {
 	uint32_t* valid_points;
-	uint32_t size = grid.x * grid.y * BLOCK_SIZE;
-	cudaMalloc((void**)&valid_points, size * sizeof(uint32_t));
+	uint32_t size = grid.x * grid.y * BLOCK_SIZE * sizeof(uint32_t);
+	cudaMalloc((void**)&valid_points, size);
 	cudaMemset(valid_points, 0, size);
 
 	renderCUDA<NUM_CHANNELS> << <grid, block >> > (
@@ -461,13 +461,13 @@ void FORWARD::render(
 
 	if (true)
 	{
-		uint32_t* h_data = (uint32_t*)malloc(size * sizeof(uint32_t));
-		cudaMemcpy(h_data, valid_points, size * sizeof(uint32_t), cudaMemcpyDeviceToHost);
+		uint32_t* h_data = (uint32_t*)malloc(size);
+		cudaMemcpy(h_data, valid_points, size, cudaMemcpyDeviceToHost);
 
-		std::string filename = "temps/valid_points/" + std::to_string(FORWARD::frame) + ".bin";
+		std::string filename = "temps/train/train_valid_points/" + std::to_string(FORWARD::frame) + ".bin";
 		std::ofstream outfile(filename, std::ios::binary);
 		if (outfile.is_open()) {
-			outfile.write(reinterpret_cast<char*>(h_data), size * sizeof(uint32_t));
+			outfile.write(reinterpret_cast<char*>(h_data), size);
 			outfile.close();
 			// std::cout << "Data saved to " << filename << std::endl;
 		} else {
