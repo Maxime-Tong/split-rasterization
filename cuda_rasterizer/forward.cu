@@ -476,6 +476,7 @@ void FORWARD::render(
 
 		free(h_data);
 	}
+	cudaFree(valid_points);
 	
 	FORWARD::frame++;
 }
