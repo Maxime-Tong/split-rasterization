@@ -134,6 +134,8 @@ RasterizeGaussiansCUDA(
 	float elapsedTime;
     cudaEventElapsedTime(&elapsedTime, start, stop);
     std::cout << "Kernel execution time: " << elapsedTime << " ms" << std::endl;
+	cudaEventDestroy(start);
+	cudaEventDestroy(stop);
 
   return std::make_tuple(rendered, out_color, radii, geomBuffer, binningBuffer, imgBuffer, out_invdepth);
 }
