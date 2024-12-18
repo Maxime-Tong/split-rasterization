@@ -324,17 +324,6 @@ renderCUDA(
 
 	float expected_invdepth = 0.0f;
 
-	__shared__ int valid_cnt;
-	uint32_t block_id = block.group_index().y * horizontal_blocks + block.group_index().x;
-
-	if (block.thread_rank() == 0) valid_cnt = 0;
-	__shared__ uint32_t filter[BLOCK_SIZE * 4];
-
-	filter[block.thread_rank()] = 0;
-	filter[block.thread_rank() + BLOCK_SIZE] = 0;
-	filter[block.thread_rank() + BLOCK_SIZE * 2] = 0;
-	filter[block.thread_rank() + BLOCK_SIZE * 3] = 0;
-
 	// Iterate over batches until all done or range is complete
 	for (int i = 0; i < rounds; i++, toDo -= BLOCK_SIZE)
 	{
@@ -383,17 +372,7 @@ renderCUDA(
 				continue;
 			}
 
-			uint32_t h1 = (collected_id[j] >> 5) & 0x3ff;
-			uint32_t h2 = (1 << (collected_id[j] & 0x1f));
-			bool find = (atomicOr(&filter[h1], h2) & h2);
-			if (!find)
-			{
-				int idx = atomicAdd(&valid_cnt, 1);
-				if (idx < BLOCK_SIZE)
-				{
-					valid_points[block_id * BLOCK_SIZE + idx] = collected_id[j];
-				}
-			}
+			valid_points[collected_id[j]] |= 1;
 
 			// Eq. (3) from 3D Gaussian splatting paper.
 			for (int ch = 0; ch < CHANNELS; ch++)
@@ -428,7 +407,7 @@ void FORWARD::render(
 	const dim3 grid, dim3 block,
 	const uint2* ranges,
 	const uint32_t* point_list,
-	int W, int H,
+	int W, int H, int P,
 	const float2* means2D,
 	const float* colors,
 	const float4* conic_opacity,
@@ -440,9 +419,8 @@ void FORWARD::render(
 	float* depth)
 {
 	uint32_t* valid_points;
-	uint32_t size = grid.x * grid.y * BLOCK_SIZE * sizeof(uint32_t);
-	cudaMalloc((void**)&valid_points, size);
-	cudaMemset(valid_points, 0, size);
+	cudaMalloc((void**)&valid_points, P * sizeof(uint32_t));
+	cudaMemset(valid_points, 0, P * sizeof(uint32_t));
 
 	renderCUDA<NUM_CHANNELS> << <grid, block >> > (
 		ranges,
@@ -461,13 +439,13 @@ void FORWARD::render(
 
 	if (true)
 	{
-		uint32_t* h_data = (uint32_t*)malloc(size);
-		cudaMemcpy(h_data, valid_points, size, cudaMemcpyDeviceToHost);
+		uint32_t* h_data = (uint32_t*)malloc(P * sizeof(uint32_t));
+		cudaMemcpy(h_data, valid_points, P * sizeof(uint32_t), cudaMemcpyDeviceToHost);
 
-		std::string filename = "temps/train/train_valid_points/" + std::to_string(FORWARD::frame) + ".bin";
+		std::string filename = "temps_a6000/lego/train_valid_points/" + std::to_string(FORWARD::frame) + ".bin";
 		std::ofstream outfile(filename, std::ios::binary);
 		if (outfile.is_open()) {
-			outfile.write(reinterpret_cast<char*>(h_data), size);
+			outfile.write(reinterpret_cast<char*>(h_data), P * sizeof(uint32_t));
 			outfile.close();
 			// std::cout << "Data saved to " << filename << std::endl;
 		} else {

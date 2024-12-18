@@ -326,7 +326,7 @@ int CudaRasterizer::Rasterizer::forward(
 		tile_grid, block,
 		imgState.ranges,
 		binningState.point_list,
-		width, height,
+		width, height, P,
 		geomState.means2D,
 		feature_ptr,
 		geomState.conic_opacity,
