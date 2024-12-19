@@ -372,7 +372,8 @@ renderCUDA(
 				continue;
 			}
 
-			valid_points[collected_id[j]] |= 1;
+			// valid_points[collected_id[j]] |= 1;
+			atomicAdd(&valid_points[collected_id[j]], 1);
 
 			// Eq. (3) from 3D Gaussian splatting paper.
 			for (int ch = 0; ch < CHANNELS; ch++)
@@ -442,7 +443,7 @@ void FORWARD::render(
 		uint32_t* h_data = (uint32_t*)malloc(P * sizeof(uint32_t));
 		cudaMemcpy(h_data, valid_points, P * sizeof(uint32_t), cudaMemcpyDeviceToHost);
 
-		std::string filename = "temps_a6000/lego/train_valid_points/" + std::to_string(FORWARD::frame) + ".bin";
+		std::string filename = "temps_a6000/bicycle/train_valid_points/" + std::to_string(FORWARD::frame) + ".bin";
 		std::ofstream outfile(filename, std::ios::binary);
 		if (outfile.is_open()) {
 			outfile.write(reinterpret_cast<char*>(h_data), P * sizeof(uint32_t));

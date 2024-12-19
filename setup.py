@@ -23,8 +23,8 @@ extra_compile_args = {
         "-I" + os.path.join(os.path.dirname(os.path.abspath(__file__)), "third_party/glm/"),
         "-O2",
         "-std=c++17",
-        "-arch=compute_86",
-        "-code=sm_86",
+        "-arch=compute_80",
+        "-code=sm_80",
         "-lineinfo",
     ],
 }
