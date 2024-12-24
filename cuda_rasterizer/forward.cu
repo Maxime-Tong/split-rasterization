@@ -324,6 +324,13 @@ renderCUDA(
 
 	float expected_invdepth = 0.0f;
 
+	uint32_t top_gaussians[MAX_GS];
+	float top_gaussians_score[MAX_GS];
+	int min_score_idx = 0;
+	int top_gaussians_size = 0;
+
+	top_gaussians_score[min_score_idx] = 520.0f;
+
 	// Iterate over batches until all done or range is complete
 	for (int i = 0; i < rounds; i++, toDo -= BLOCK_SIZE)
 	{
@@ -372,15 +379,37 @@ renderCUDA(
 				continue;
 			}
 
-			// valid_points[collected_id[j]] |= 1;
-			atomicAdd(&valid_points[collected_id[j]], 1);
+			float weight = alpha * T;
+			if (top_gaussians_size < MAX_GS)
+			{
+				top_gaussians[top_gaussians_size] = collected_id[j];
+				top_gaussians_score[top_gaussians_size] = weight;
+				atomicAdd(&valid_points[collected_id[j]], 1);
+				if (weight < top_gaussians_score[min_score_idx])
+					min_score_idx = top_gaussians_size;
+				top_gaussians_size++;
+			} else if (weight > top_gaussians_score[min_score_idx])
+			{
+				// remove
+				atomicSub(&valid_points[top_gaussians[min_score_idx]], 1);
+				// insert
+				top_gaussians[min_score_idx] = collected_id[j];
+				top_gaussians_score[min_score_idx] = weight;
+				atomicAdd(&valid_points[collected_id[j]], 1);
+				// update min_score_idx
+				for (int k = 0; k < MAX_GS; k++)
+				{
+					if (top_gaussians_score[k] < top_gaussians_score[min_score_idx])
+						min_score_idx = k;
+				}
+			}
 
 			// Eq. (3) from 3D Gaussian splatting paper.
 			for (int ch = 0; ch < CHANNELS; ch++)
-				C[ch] += features[collected_id[j] * CHANNELS + ch] * alpha * T;
+				C[ch] += features[collected_id[j] * CHANNELS + ch] * weight;
 
 			if(invdepth)
-			expected_invdepth += (1 / depths[collected_id[j]]) * alpha * T;
+			expected_invdepth += (1 / depths[collected_id[j]]) * weight;
 
 			T = test_T;
 
