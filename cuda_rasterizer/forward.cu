@@ -384,18 +384,14 @@ renderCUDA(
 			{
 				top_gaussians[top_gaussians_size] = collected_id[j];
 				top_gaussians_score[top_gaussians_size] = weight;
-				atomicAdd(&valid_points[collected_id[j]], 1);
 				if (weight < top_gaussians_score[min_score_idx])
 					min_score_idx = top_gaussians_size;
 				top_gaussians_size++;
 			} else if (weight > top_gaussians_score[min_score_idx])
 			{
-				// remove
-				atomicSub(&valid_points[top_gaussians[min_score_idx]], 1);
-				// insert
+				// replace
 				top_gaussians[min_score_idx] = collected_id[j];
 				top_gaussians_score[min_score_idx] = weight;
-				atomicAdd(&valid_points[collected_id[j]], 1);
 				// update min_score_idx
 				for (int k = 0; k < MAX_GS; k++)
 				{
@@ -417,6 +413,11 @@ renderCUDA(
 			// pixel.
 			last_contributor = contributor;
 		}
+	}
+
+	for (int k = 0; k < top_gaussians_size; k++)
+	{
+		atomicAdd(&valid_points[top_gaussians[k]], 1);
 	}
 
 	// All threads that treat valid pixel write out their final
