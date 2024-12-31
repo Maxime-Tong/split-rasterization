@@ -384,14 +384,18 @@ renderCUDA(
 			{
 				top_gaussians[top_gaussians_size] = collected_id[j];
 				top_gaussians_score[top_gaussians_size] = weight;
+				atomicAdd(&valid_points[collected_id[j]], 1);
 				if (weight < top_gaussians_score[min_score_idx])
 					min_score_idx = top_gaussians_size;
 				top_gaussians_size++;
 			} else if (weight > top_gaussians_score[min_score_idx])
 			{
-				// replace
+				// remove
+				atomicSub(&valid_points[top_gaussians[min_score_idx]], 1);
+				// insert
 				top_gaussians[min_score_idx] = collected_id[j];
 				top_gaussians_score[min_score_idx] = weight;
+				atomicAdd(&valid_points[collected_id[j]], 1);
 				// update min_score_idx
 				for (int k = 0; k < MAX_GS; k++)
 				{
@@ -413,11 +417,6 @@ renderCUDA(
 			// pixel.
 			last_contributor = contributor;
 		}
-	}
-
-	for (int k = 0; k < top_gaussians_size; k++)
-	{
-		atomicAdd(&valid_points[top_gaussians[k]], 1);
 	}
 
 	// All threads that treat valid pixel write out their final
@@ -473,7 +472,7 @@ void FORWARD::render(
 		uint32_t* h_data = (uint32_t*)malloc(P * sizeof(uint32_t));
 		cudaMemcpy(h_data, valid_points, P * sizeof(uint32_t), cudaMemcpyDeviceToHost);
 
-		std::string filename = "temps_a6000/bicycle/train_valid_points/" + std::to_string(FORWARD::frame) + ".bin";
+		std::string filename = "temps_a6000/flowers/train_valid_points/" + std::to_string(FORWARD::frame) + ".bin";
 		std::ofstream outfile(filename, std::ios::binary);
 		if (outfile.is_open()) {
 			outfile.write(reinterpret_cast<char*>(h_data), P * sizeof(uint32_t));
